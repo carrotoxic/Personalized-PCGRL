@@ -13,20 +13,22 @@ class DataConfig:
 @dataclass
 class ModelConfig:
     input_dim: int = 2
-    hidden_dim: int = 64
-    latent_dim: int = 32
+    hidden_dim: int =  64
+    latent_dim: int = 16
     num_layers: int = 1
+    use_batch_norm: bool = False
 
 
 @dataclass
 class TrainConfig:
-    batch_size: int = 32
-    num_epochs: int = 50
-    lr: float = 1e-3
-    weight_decay: float = 0.0
+    batch_size: int = 256
+    num_epochs: int = 1000
+    lr: float = 1e-2
+    weight_decay: float = 0
     device: str = "cuda"
     log_interval: int = 50
     model_save_path: Path = Path("checkpoints/player_model/auto_encoder/lstm_ae.pt")
+    gradient_clip: float = 1.0
 
 
 data_config = DataConfig()

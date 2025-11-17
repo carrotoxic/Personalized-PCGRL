@@ -18,19 +18,43 @@ class LSTMAutoencoder(nn.Module):
             batch_first=True,
         )
 
-        self.to_latent = nn.Linear(cfg.hidden_dim, cfg.latent_dim)
 
-        self.to_dec_h = nn.Linear(cfg.latent_dim, cfg.hidden_dim * cfg.num_layers)
-        self.to_dec_c = nn.Linear(cfg.latent_dim, cfg.hidden_dim * cfg.num_layers)
+        self.to_latent = nn.Sequential(
+            nn.Linear(cfg.hidden_dim, cfg.hidden_dim),
+            nn.ReLU(),
+            nn.Linear(cfg.hidden_dim, cfg.latent_dim),
+        )
+
 
         self.decoder_lstm = nn.LSTM(
-            input_size=cfg.input_dim,
+            input_size=cfg.latent_dim,
             hidden_size=cfg.hidden_dim,
             num_layers=cfg.num_layers,
             batch_first=True,
         )
 
-        self.output_proj = nn.Linear(cfg.hidden_dim, cfg.input_dim)
+        self.output_proj = nn.Sequential(
+            nn.Linear(cfg.hidden_dim, cfg.hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(cfg.hidden_dim // 2, cfg.input_dim),
+        )
+        
+        # Initialize weights
+        self._init_weights()
+    
+    def _init_weights(self):
+        """Initialize weights using Xavier uniform."""
+        for name, param in self.named_parameters():
+            if 'weight_ih' in name:
+                nn.init.xavier_uniform_(param.data)
+            elif 'weight_hh' in name:
+                nn.init.orthogonal_(param.data)
+            elif 'bias' in name:
+                param.data.fill_(0)
+                # Set forget gate bias to 1 for LSTM
+                n = param.size(0)
+                start, end = n // 4, n // 2
+                param.data[start:end].fill_(1)
 
     def encode(self, x: torch.Tensor, lengths: torch.Tensor) -> torch.Tensor:
         outputs, _ = self.encoder_lstm(x)
@@ -47,14 +71,9 @@ class LSTMAutoencoder(nn.Module):
         B = latent.size(0)
         device = latent.device
 
-        L = self.cfg.num_layers
-        H = self.cfg.hidden_dim
+        z_rep = latent.unsqueeze(1).expand(B, max_len, -1)
+        dec_outputs, _ = self.decoder_lstm(z_rep)
 
-        h0 = self.to_dec_h(latent).view(B, L, H).permute(1, 0, 2).contiguous()
-        c0 = self.to_dec_c(latent).view(B, L, H).permute(1, 0, 2).contiguous()
-
-        dec_inputs = torch.zeros(B, max_len, self.cfg.input_dim, device=device)
-        dec_outputs, _ = self.decoder_lstm(dec_inputs, (h0, c0))
         recon = self.output_proj(dec_outputs)
         return recon
 
